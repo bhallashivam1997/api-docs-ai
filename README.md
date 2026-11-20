@@ -1,6 +1,6 @@
 # api-docs-ai
 
-A small Express 5 REST API for a demo. Users are kept in memory, so they disappear when the server restarts.
+A small REST API for a demo, with 3 endpoints. It is built with Express (version 5). Users are kept in memory, so they disappear when the server restarts.
 
 ## Run it
 
