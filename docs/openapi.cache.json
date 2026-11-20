@@ -2,17 +2,17 @@
   "operations": {
     "GET /health": {
       "model": "gemini-3.6-flash",
-      "inputHash": "37697785947b2344bcc1d0ad2a018f83760181de45153b83a8a13a54ec8970f9",
+      "inputHash": "0815ae3655a985c03c66f45bd2ebd803a73d0fd9d83bc9895e96ed4d9f12c3b5",
       "answer": {
         "operationId": "getHealth",
-        "summary": "Check service health",
-        "description": "Returns the operational status of the service.",
+        "summary": "Check application health",
+        "description": "Returns the operational status of the application. This operation takes no parameters and reads no request body.",
         "parameters": [],
         "requestBody": null,
         "responses": [
           {
             "status": 200,
-            "description": "The service is operational.",
+            "description": "The application is operational.",
             "evidence": "src/routes/health.js: res.status(200).json({ status: 'ok' });",
             "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"status\":{\"type\":\"string\",\"const\":\"ok\"}},\"required\":[\"status\"],\"additionalProperties\":false}",
             "example": "{\"status\":\"ok\"}"
