@@ -1,6 +1,7 @@
 {
   "operations": {
     "GET /health": {
+      "model": "gemini-3.6-flash",
       "inputHash": "37697785947b2344bcc1d0ad2a018f83760181de45153b83a8a13a54ec8970f9",
       "answer": {
         "operationId": "getHealth",
@@ -20,6 +21,7 @@
       }
     },
     "POST /users": {
+      "model": "gemini-3.6-flash",
       "inputHash": "20f5e0588eb039b77d8686d52c5054f494b6099b5b284b3026c6f7a5154afd9d",
       "answer": {
         "operationId": "createUser",
@@ -58,6 +60,7 @@
       }
     },
     "GET /users/{id}": {
+      "model": "gemini-3.6-flash",
       "inputHash": "0f61ad80914003b49b5ae62460ab635fc4b87c6161cf8939888524a9662b4ce9",
       "answer": {
         "operationId": "getUser",

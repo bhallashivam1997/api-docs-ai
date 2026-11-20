@@ -1,0 +1,118 @@
+# Fails a PR when docs/openapi.yaml is stale or does not lint.
+# The one job always runs and always reports, so "docs-check" can be a required check:
+# skipping happens inside the job (label, or no API files changed), never with a
+# workflow-level paths filter, which would leave the required check pending forever.
+# Uses no secrets, so it is safe on pull requests from forks.
+name: docs-check
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: docs-check-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  docs-check:
+    name: docs-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Skip by label
+        id: label
+        if: contains(github.event.pull_request.labels.*.name, 'skip-api-docs')
+        run: |
+          echo "Skipped by label: skip-api-docs" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Find changed API files
+        id: changes
+        if: steps.label.outcome == 'skipped'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            // API files: everything the generated docs depend on.
+            const isApiFile = (path) =>
+              (path.startsWith('src/') && path !== 'src/server.js')
+              || path.startsWith('scripts/docs/')
+              || path === 'docs/openapi.yaml'
+              || path === 'docs/openapi.cache.json';
+
+            const pr = context.payload.pull_request;
+            // The list-files API returns at most 3000 files; above that, check to be safe.
+            if (pr.changed_files > 3000) {
+              core.info(`${pr.changed_files} files changed; running the check without filtering.`);
+              core.setOutput('api_changed', 'true');
+              return;
+            }
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              ...context.repo,
+              pull_number: pr.number,
+              per_page: 100,
+            });
+            // A rename counts under both its old and new path.
+            const changed = files
+              .flatMap((f) => [f.filename, f.previous_filename])
+              .filter((path) => path && isApiFile(path));
+
+            if (changed.length === 0) {
+              core.setOutput('api_changed', 'false');
+              await core.summary.addRaw('Skipped: no API files changed').write();
+              return;
+            }
+            core.info(`API files changed:\n${[...new Set(changed)].join('\n')}`);
+            core.setOutput('api_changed', 'true');
+
+      - name: Check out the PR
+        if: steps.changes.outputs.api_changed == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        if: steps.changes.outputs.api_changed == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.changes.outputs.api_changed == 'true'
+        # No install scripts: none are needed, and they would run code from the PR's dependencies.
+        run: npm ci --ignore-scripts
+
+      - name: Check the spec is up to date
+        id: check
+        if: steps.changes.outputs.api_changed == 'true'
+        run: npm run docs:check -- --report "$RUNNER_TEMP/stale.md"
+
+      - name: Lint the spec
+        id: lint
+        # Lint even when the check failed, so both problems show up in one run.
+        if: ${{ !cancelled() && steps.check.outcome != 'skipped' }}
+        run: npm run docs:lint
+
+      - name: Explain the failure
+        if: failure() && steps.changes.outputs.api_changed == 'true'
+        env:
+          CHECK_OUTCOME: ${{ steps.check.outcome }}
+          LINT_OUTCOME: ${{ steps.lint.outcome }}
+        run: |
+          {
+            echo "## API docs are out of date"
+            echo
+            if [ "$CHECK_OUTCOME" = "failure" ] && [ -s "$RUNNER_TEMP/stale.md" ]; then
+              cat "$RUNNER_TEMP/stale.md"
+              echo
+            fi
+            if [ "$LINT_OUTCOME" = "failure" ]; then
+              echo "\`npm run docs:lint\` found errors in docs/openapi.yaml; see the job log."
+              echo
+            fi
+            echo "Run npm run docs:generate locally, or ask a maintainer to comment /regen-docs."
+          } >> "$GITHUB_STEP_SUMMARY"

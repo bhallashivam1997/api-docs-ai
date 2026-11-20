@@ -1,0 +1,193 @@
+# A maintainer comments "/regen-docs" on a PR: regenerate docs/openapi.yaml with Gemini,
+# commit it to the PR branch and reply with what changed.
+#
+# Security model:
+# - Only users with admin, maintain or write permission can trigger it; checked through the
+#   API before anything else runs.
+# - Only PRs whose head branch lives in this repository (no forks), so the code that runs next
+#   to GEMINI_API_KEY is code someone with write access has already pushed here.
+# - GEMINI_API_KEY is visible to the generate step only; DOCS_BOT_TOKEN to the push step only.
+#   Checkout does not persist credentials, so PR code never sees a token.
+# - Untrusted values (comment body, branch name) never appear inside ${{ }} in a run: block;
+#   they are read in JavaScript or passed through env variables.
+name: regen-docs
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions: {}
+
+jobs:
+  regen-docs:
+    # Cheap pre-filter. Expressions cannot trim, so the exact "/regen-docs" match is in the
+    # gate step. Job-level concurrency means ordinary comments, which skip here, never
+    # cancel a regeneration that is already running.
+    if: github.event.issue.pull_request && contains(github.event.comment.body, '/regen-docs')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    concurrency:
+      group: regen-docs-${{ github.event.issue.number }}
+      cancel-in-progress: true
+    steps:
+      - name: Authorise and check the PR
+        id: gate
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const comment = context.payload.comment;
+            if (comment.body.trim() !== '/regen-docs') {
+              core.info('Comment is not exactly /regen-docs; nothing to do.');
+              core.setOutput('ok', 'false');
+              return;
+            }
+
+            const reply = (body) => github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: context.issue.number,
+              body,
+            });
+            const stop = async (message) => {
+              await reply(message);
+              core.notice(message);
+              core.setOutput('ok', 'false');
+            };
+
+            // 1. Authorise first. The legacy `permission` field reports maintain as "write"
+            //    and triage as "read", so admin/write covers admin, maintain and write.
+            const { data: perm } = await github.rest.repos.getCollaboratorPermissionLevel({
+              ...context.repo,
+              username: comment.user.login,
+            });
+            core.info(`${comment.user.login}: permission=${perm.permission}, role=${perm.role_name}`);
+            if (!['admin', 'write'].includes(perm.permission)) {
+              return stop('Only maintainers can run /regen-docs');
+            }
+
+            // 2. The PR must be open and its branch must live in this repository.
+            const { data: pr } = await github.rest.pulls.get({
+              ...context.repo,
+              pull_number: context.issue.number,
+            });
+            const thisRepo = `${context.repo.owner}/${context.repo.repo}`;
+            if (pr.state !== 'open') {
+              return stop(`Cannot run /regen-docs: this pull request is ${pr.state}.`);
+            }
+            if (pr.head.repo?.full_name !== thisRepo) {
+              return stop('Cannot run /regen-docs: the branch is in a fork. Run npm run docs:generate locally and push the result.');
+            }
+
+            await github.rest.reactions.createForIssueComment({
+              ...context.repo,
+              comment_id: comment.id,
+              content: 'eyes',
+            });
+            core.setOutput('ok', 'true');
+            core.setOutput('head_ref', pr.head.ref);
+            core.setOutput('head_sha', pr.head.sha);
+
+      - name: Check out the PR branch
+        if: steps.gate.outputs.ok == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.gate.outputs.head_ref }}
+          persist-credentials: false
+
+      - name: Confirm the branch has not moved since authorisation
+        if: steps.gate.outputs.ok == 'true'
+        # Checking out by name could pick up a commit pushed after the gate step looked at the PR.
+        env:
+          EXPECTED_SHA: ${{ steps.gate.outputs.head_sha }}
+        run: |
+          actual="$(git rev-parse HEAD)"
+          if [ "$actual" != "$EXPECTED_SHA" ]; then
+            echo "::error::The PR branch moved from $EXPECTED_SHA to $actual after authorisation. Comment /regen-docs again."
+            exit 1
+          fi
+
+      - name: Set up Node.js
+        if: steps.gate.outputs.ok == 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.gate.outputs.ok == 'true'
+        # No install scripts: none are needed, and they would run before the generate step.
+        run: npm ci --ignore-scripts
+
+      - name: Generate the spec
+        id: generate
+        if: steps.gate.outputs.ok == 'true'
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_MODEL: gemini-3.6-flash
+          GEMINI_FALLBACK_MODELS: gemini-3.5-flash-lite
+        run: npm run docs:generate -- --report "$RUNNER_TEMP/regenerated.md"
+
+      - name: Lint the spec
+        if: steps.gate.outputs.ok == 'true'
+        run: npm run docs:lint
+
+      - name: Commit and push
+        id: push
+        if: steps.gate.outputs.ok == 'true'
+        env:
+          DOCS_BOT_TOKEN: ${{ secrets.DOCS_BOT_TOKEN }}
+          HEAD_REF: ${{ steps.gate.outputs.head_ref }}
+        run: |
+          # The cache holds the hashes docs:check compares against, so it ships with the spec.
+          if [ -z "$(git status --porcelain -- docs/openapi.yaml docs/openapi.cache.json)" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/openapi.yaml docs/openapi.cache.json
+          git commit -m "docs: regenerate OpenAPI spec"
+          # Pushing with DOCS_BOT_TOKEN, not GITHUB_TOKEN, so the push triggers docs-check again.
+          git push "https://x-access-token:${DOCS_BOT_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:refs/heads/${HEAD_REF}"
+          {
+            echo "changed=true"
+            echo "sha=$(git rev-parse HEAD)"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Reply with the result
+        if: ${{ !cancelled() && steps.gate.outputs.ok == 'true' }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          JOB_STATUS: ${{ job.status }}
+          CHANGED: ${{ steps.push.outputs.changed }}
+          PUSHED_SHA: ${{ steps.push.outputs.sha }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            let regenerated = '';
+            try {
+              regenerated = fs.readFileSync(`${process.env.RUNNER_TEMP}/regenerated.md`, 'utf8').trim();
+            } catch {}
+
+            let body;
+            if (process.env.JOB_STATUS !== 'success') {
+              body = `/regen-docs failed. See the [workflow run](${runUrl}) for details.`;
+            } else if (process.env.CHANGED !== 'true') {
+              body = 'Spec already up to date.';
+            } else {
+              body = [
+                `Regenerated docs/openapi.yaml and pushed ${process.env.PUSHED_SHA}.`,
+                '',
+                'Regenerated operations:',
+                regenerated || '- none (the spec changed without a new Gemini answer, for example a removed route)',
+              ].join('\n');
+            }
+            await github.rest.issues.createComment({
+              ...context.repo,
+              issue_number: context.issue.number,
+              body,
+            });
