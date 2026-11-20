@@ -2,8 +2,10 @@ import { Router } from 'express';
 import { HttpError } from '../errors.js';
 import { createUser, findUserByEmail, getUser } from '../store.js';
 
-const ALLOWED_FIELDS = ['name', 'email', 'role'];
+const ALLOWED_FIELDS = ['name', 'email', 'role', 'age'];
 const ROLES = ['admin', 'member'];
+const MIN_AGE = 0;
+const MAX_AGE = 150;
 // Deliberately simple: something@something.tld, no whitespace.
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -11,7 +13,7 @@ function invalid(message) {
   return new HttpError(400, 'invalid_input', message);
 }
 
-// Returns a clean { name, email, role } or throws a 400 HttpError.
+// Returns a clean { name, email, role, age } or throws a 400 HttpError.
 function validateNewUser(body) {
   if (body === null || typeof body !== 'object' || Array.isArray(body)) {
     throw invalid('Request body must be a JSON object');
@@ -43,7 +45,13 @@ function validateNewUser(body) {
     throw invalid(`role must be one of: ${ROLES.join(', ')}`);
   }
 
-  return { name, email, role };
+  // Optional. Omitted (or null) is stored as null so every user has the same fields.
+  const age = body.age === undefined ? null : body.age;
+  if (age !== null && (!Number.isInteger(age) || age < MIN_AGE || age > MAX_AGE)) {
+    throw invalid(`age must be a whole number from ${MIN_AGE} to ${MAX_AGE}`);
+  }
+
+  return { name, email, role, age };
 }
 
 export const usersRouter = Router();
