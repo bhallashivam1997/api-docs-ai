@@ -13,12 +13,13 @@ export function getUser(id) {
   return usersById.get(id);
 }
 
-export function createUser({ name, email, role }) {
+export function createUser({ name, email, role, age }) {
   const user = {
     id: randomUUID(),
     name,
     email,
     role,
+    age,
     createdAt: new Date().toISOString(),
   };
   usersById.set(user.id, user);
