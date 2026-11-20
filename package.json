@@ -1,0 +1,22 @@
+{
+  "name": "api-docs-ai",
+  "version": "1.0.0",
+  "description": "Small Express REST API for a demo: health check and in-memory users.",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bhallashivam1997/api-docs-ai.git"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "express": "^5.3.0"
+  }
+}
