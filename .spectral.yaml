@@ -1,0 +1,4 @@
+extends: ["spectral:oas"]
+rules:
+  # The repo has no contact details to publish, and the generator does not invent them.
+  info-contact: off

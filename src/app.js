@@ -1,4 +1,5 @@
 import express from 'express';
+import { docsRouter } from './docs.js';
 import { HttpError } from './errors.js';
 import { healthRouter } from './routes/health.js';
 import { usersRouter } from './routes/users.js';
@@ -10,6 +11,7 @@ export function createApp() {
 
   app.use('/health', healthRouter);
   app.use('/users', usersRouter);
+  app.use('/docs', docsRouter);
 
   // Nothing matched: unknown route.
   app.use((req, res, next) => {

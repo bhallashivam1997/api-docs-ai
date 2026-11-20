@@ -1,0 +1,96 @@
+{
+  "operations": {
+    "GET /health": {
+      "inputHash": "37697785947b2344bcc1d0ad2a018f83760181de45153b83a8a13a54ec8970f9",
+      "answer": {
+        "operationId": "getHealth",
+        "summary": "Check service health",
+        "description": "Returns the operational status of the service.",
+        "parameters": [],
+        "requestBody": null,
+        "responses": [
+          {
+            "status": 200,
+            "description": "The service is operational.",
+            "evidence": "src/routes/health.js: res.status(200).json({ status: 'ok' });",
+            "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"status\":{\"type\":\"string\",\"const\":\"ok\"}},\"required\":[\"status\"],\"additionalProperties\":false}",
+            "example": "{\"status\":\"ok\"}"
+          }
+        ]
+      }
+    },
+    "POST /users": {
+      "inputHash": "20f5e0588eb039b77d8686d52c5054f494b6099b5b284b3026c6f7a5154afd9d",
+      "answer": {
+        "operationId": "createUser",
+        "summary": "Create a user",
+        "description": "Creates a new user record. The request must include `name` (1 to 100 characters) and `email` (valid email up to 254 characters), and may include `role` ('admin' or 'member', defaulting to 'member'). Unrecognized fields are not permitted and the email address must be unique.",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "description": "The user creation details including name, email, and optional role.",
+          "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"minLength\":1,\"maxLength\":100},\"email\":{\"type\":\"string\",\"format\":\"email\",\"maxLength\":254},\"role\":{\"type\":\"string\",\"enum\":[\"admin\",\"member\"],\"default\":\"member\"}},\"required\":[\"name\",\"email\"],\"additionalProperties\":false}",
+          "example": "{\"name\":\"Alex Mercer\",\"email\":\"alex.mercer@example.com\",\"role\":\"member\"}"
+        },
+        "responses": [
+          {
+            "status": 201,
+            "description": "The user was successfully created.",
+            "evidence": "src/routes/users.js: res.status(201).json(createUser(input));",
+            "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"format\":\"uuid\"},\"name\":{\"type\":\"string\"},\"email\":{\"type\":\"string\"},\"role\":{\"type\":\"string\",\"enum\":[\"admin\",\"member\"]},\"createdAt\":{\"type\":\"string\",\"format\":\"date-time\"}},\"required\":[\"id\",\"name\",\"email\",\"role\",\"createdAt\"],\"additionalProperties\":false}",
+            "example": "{\"id\":\"a1b2c3d4-e5f6-4a5b-8c9d-0e1f2a3b4c5d\",\"name\":\"Alex Mercer\",\"email\":\"alex.mercer@example.com\",\"role\":\"member\",\"createdAt\":\"2026-03-30T12:00:00.000Z\"}"
+          },
+          {
+            "status": 400,
+            "description": "The request body is not valid JSON, contains unknown fields, or has missing or invalid values for `name`, `email`, or `role`.",
+            "evidence": "src/routes/users.js: validateNewUser throws HttpError(400, 'invalid_input', ...); src/app.js: express.json() error handling for 'invalid_json' and 'bad_request'",
+            "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"error\":{\"type\":\"object\",\"properties\":{\"code\":{\"type\":\"string\"},\"message\":{\"type\":\"string\"}},\"required\":[\"code\",\"message\"],\"additionalProperties\":false}},\"required\":[\"error\"],\"additionalProperties\":false}",
+            "example": "{\"error\":{\"code\":\"invalid_input\",\"message\":\"name is required and must be a string\"}}"
+          },
+          {
+            "status": 409,
+            "description": "A user already exists with the provided `email` address.",
+            "evidence": "src/routes/users.js: throw new HttpError(409, 'email_taken', 'A user with this email already exists');",
+            "schema": "{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"error\":{\"type\":\"object\",\"properties\":{\"code\":{\"type\":\"string\"},\"message\":{\"type\":\"string\"}},\"required\":[\"code\",\"message\"],\"additionalProperties\":false}},\"required\":[\"error\"],\"additionalProperties\":false}",
+            "example": "{\"error\":{\"code\":\"email_taken\",\"message\":\"A user with this email already exists\"}}"
+          }
+        ]
+      }
+    },
+    "GET /users/{id}": {
+      "inputHash": "0f61ad80914003b49b5ae62460ab635fc4b87c6161cf8939888524a9662b4ce9",
+      "answer": {
+        "operationId": "getUser",
+        "summary": "Retrieve a user by ID",
+        "description": "Retrieves details for a single user given their unique identifier. Returns an error if no user exists with the specified ID.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Unique identifier of the user to retrieve.",
+            "schema": "{\"type\":\"string\",\"format\":\"uuid\"}",
+            "example": "\"9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d\""
+          }
+        ],
+        "requestBody": null,
+        "responses": [
+          {
+            "status": 200,
+            "description": "The user was found and returned.",
+            "evidence": "src/routes/users.js: res.status(200).json(user);",
+            "schema": "{\"type\":\"object\",\"properties\":{\"id\":{\"type\":\"string\",\"format\":\"uuid\"},\"name\":{\"type\":\"string\"},\"email\":{\"type\":\"string\",\"format\":\"email\"},\"role\":{\"type\":\"string\",\"enum\":[\"admin\",\"member\"]},\"createdAt\":{\"type\":\"string\",\"format\":\"date-time\"}},\"required\":[\"id\",\"name\",\"email\",\"role\",\"createdAt\"],\"additionalProperties\":false}",
+            "example": "{\"id\":\"9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d\",\"name\":\"Alex Taylor\",\"email\":\"alex.taylor@example.com\",\"role\":\"member\",\"createdAt\":\"2026-03-04T09:15:00.000Z\"}"
+          },
+          {
+            "status": 404,
+            "description": "No user exists with the given ID.",
+            "evidence": "src/routes/users.js: throw new HttpError(404, 'not_found', 'User not found');",
+            "schema": "{\"type\":\"object\",\"properties\":{\"error\":{\"type\":\"object\",\"properties\":{\"code\":{\"type\":\"string\",\"enum\":[\"not_found\"]},\"message\":{\"type\":\"string\",\"enum\":[\"User not found\"]}},\"required\":[\"code\",\"message\"],\"additionalProperties\":false}},\"required\":[\"error\"],\"additionalProperties\":false}",
+            "example": "{\"error\":{\"code\":\"not_found\",\"message\":\"User not found\"}}"
+          }
+        ]
+      }
+    }
+  }
+}

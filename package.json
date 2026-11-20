@@ -6,7 +6,11 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "node --watch src/server.js"
+    "dev": "node --watch src/server.js",
+    "docs:generate": "node scripts/docs/generate.js",
+    "docs:dry-run": "node scripts/docs/generate.js --dry-run",
+    "docs:lint": "spectral lint docs/openapi.yaml",
+    "docs:check": "node scripts/docs/generate.js --check"
   },
   "engines": {
     "node": ">=20"
@@ -17,6 +21,15 @@
   },
   "license": "ISC",
   "dependencies": {
-    "express": "^5.3.0"
+    "@google/genai": "^3.6.1",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "dotenv": "^18.0.10",
+    "express": "^5.3.0",
+    "swagger-ui-express": "^5.0.1",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@stoplight/spectral-cli": "^6.17.1"
   }
 }
